@@ -267,7 +267,15 @@ def moodle_scrape_calendar():
 		username, password = req_arg_parser.decode_moodle_auth(auth_token)
 		from_date = req_arg_parser.format_date(from_date)
 		to_date = req_arg_parser.format_date(to_date)
-		moodle = Moodle(username, password, from_date, to_date, in_depth, mock)
+		params = {
+			"username": username,
+			"password": password,
+			"from_date": from_date,
+			"to_date": to_date,
+			"in_depth": in_depth,
+			"mock": mock,
+		}
+		moodle = Moodle(params)
 		event_data = moodle.scrape_calendar()
 		return flask.jsonify(event_data)
 	except ValueError as error:
