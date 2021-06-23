@@ -13,16 +13,20 @@ from random import randint
 
 
 class DateTimeUtil(object):
-	today = datetime.datetime.today()
-	today = datetime.datetime(today.year, today.month, today.day)
+	date_time = datetime.datetime.today()
+	today = datetime.datetime(date_time.year, date_time.month, date_time.day)
 	today_string = today.date().isoformat()
 
-	def __init__(self, from_date, to_date, in_depth):
+	def __init__(self, params):
 		super(DateTimeUtil, self).__init__()
+		from_date = params.get('from_date')
+		to_date = params.get('to_date')
+		in_depth = params.get('in_depth')
+		mock = params.get('mock')
 		self.from_to_epochs = []
 		self.from_date_epoch = self.to_epoch(from_date)
 		self.to_date_epoch = self.to_epoch(to_date)
-		if in_depth:
+		if mock or in_depth:
 			start = from_date
 			end = to_date
 			while start <= end:
@@ -81,6 +85,8 @@ class RequestArgParser(object):
 
 
 class Moodle(object):
+	username = '<username>'
+	password = '<password>'
 	login_url = "https://learn.iiitb.net/login/index.php"
 	day_url = "https://learn.iiitb.net/calendar/view.php?view=day&time="
 	month_url = "https://learn.iiitb.net/calendar/view.php?view=month&time="
@@ -98,12 +104,12 @@ class Moodle(object):
 
 	def __init__(self, params):
 		super(Moodle, self).__init__()
-		self.username = params["username"]
-		self.password = params["password"]
-		self.from_date = params["from_date"]
-		self.to_date = params["to_date"]
-		self.in_depth = params["in_depth"]
-		self.mock = params["mock"]
+		self.username = params.get("username")
+		self.password = params.get("password")
+		self.from_date = params.get("from_date")
+		self.to_date = params.get("to_date")
+		self.in_depth = params.get("in_depth")
+		self.mock = params.get("mock")
 
 	def verify_credential(self):
 		with requests.session() as sess:
@@ -121,18 +127,19 @@ class Moodle(object):
 				"a", {"id": "loginerrormessage"}
 			)
 			if login_error_message:
-				raise ValueError(
-					{
-						"code": "incorrect-credential",
-						"message": f"The username or password is incorrect.",
-					}
-				)
+				return False
 			else:
-				return {"username": self.username, "password": self.password}
+				return True
 
 	def scrape_calendar(self):
 		events = {"id": 0, "data": {}}
-		dt_util = DateTimeUtil(self.from_date, self.to_date, self.in_depth)
+		params = {
+		'from_date': self.from_date,
+		'to_date': self.to_date,
+		'in_depth': self.in_depth,
+		'mock': self.mock,
+		}
+		dt_util = DateTimeUtil(params)
 		if self.mock:
 			if self.in_depth:
 				for epoch in dt_util.from_to_epochs:
@@ -241,16 +248,30 @@ class Moodle(object):
 
 app = flask.Flask(__name__)
 
+@app.route("/", methods=["GET"])
+def welcome():
+    hour = DateTimeUtil.date_time.hour
+    if hour < 12:
+        greeting = "Good Morning!"
+    elif hour < 17:
+        greeting = "Good Afternoon!"
+    else:
+        greeting = "Good Evening!"
+    return flask.jsonify(greeting), 200
 
 @app.route("/moodle/verify/", methods=["GET"])
 def moodle_verify_credential():
-	auth_token = flask.request.args.get("auth_token", type=str, default=None)
 	try:
+		auth_token = flask.request.args.get("auth_token", type=str, default=None)
 		req_arg_parser = RequestArgParser()
 		username, password = req_arg_parser.decode_moodle_auth(auth_token)
-		moodle = Moodle(username, password)
-		event_data = moodle.verify_credential()
-		return flask.jsonify(event_data)
+		params = {
+			"username": username,
+			"password": password,
+		}
+		moodle = Moodle(params)
+		is_verified = moodle.verify_credential()
+		return flask.jsonify(is_verified), 200
 	except ValueError as error:
 		return flask.jsonify(error.args[0]), 400
 
@@ -264,9 +285,19 @@ def moodle_scrape_calendar():
 	mock = flask.request.args.get("mock", type=bool, default=False)
 	try:
 		req_arg_parser = RequestArgParser()
-		username, password = req_arg_parser.decode_moodle_auth(auth_token)
-		from_date = req_arg_parser.format_date(from_date)
-		to_date = req_arg_parser.format_date(to_date)
+		if mock:
+			username = Moodle.username
+			password = Moodle.password
+			if in_depth:
+				from_date = req_arg_parser.format_date('2021-05-20')
+				to_date = req_arg_parser.format_date('2021-05-21')
+			else:
+				from_date = req_arg_parser.format_date('2021-05-01')
+				to_date = req_arg_parser.format_date('2021-06-30')
+		else:
+			username, password = req_arg_parser.decode_moodle_auth(auth_token)
+			from_date = req_arg_parser.format_date(from_date)
+			to_date = req_arg_parser.format_date(to_date)
 		params = {
 			"username": username,
 			"password": password,
@@ -277,7 +308,7 @@ def moodle_scrape_calendar():
 		}
 		moodle = Moodle(params)
 		event_data = moodle.scrape_calendar()
-		return flask.jsonify(event_data)
+		return flask.jsonify(event_data), 200
 	except ValueError as error:
 		return flask.jsonify(error.args[0]), 400
 
