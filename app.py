@@ -10,7 +10,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from random import randint
-
+import json
 
 class DateTimeUtil(object):
 	date_time = datetime.datetime.today()
@@ -19,10 +19,10 @@ class DateTimeUtil(object):
 
 	def __init__(self, params):
 		super(DateTimeUtil, self).__init__()
-		from_date = params.get('from_date')
-		to_date = params.get('to_date')
-		in_depth = params.get('in_depth')
-		mock = params.get('mock')
+		from_date = params.get("from_date")
+		to_date = params.get("to_date")
+		in_depth = params.get("in_depth")
+		mock = params.get("mock")
 		self.from_to_epochs = []
 		self.from_date_epoch = self.to_epoch(from_date)
 		self.to_date_epoch = self.to_epoch(to_date)
@@ -47,8 +47,9 @@ class DateTimeUtil(object):
 
 
 class RequestArgParser(object):
-	def __init__(self):
+	def __init__(self, sep_char="x"):
 		super(RequestArgParser, self).__init__()
+		self.sep_char = sep_char
 
 	def format_date(self, date_string):
 		if date_string == None:
@@ -63,7 +64,7 @@ class RequestArgParser(object):
 				}
 			)
 
-	def decode_moodle_auth(self, auth_token, sep_char="x"):
+	def decode_moodle_auth(self, auth_token):
 		if auth_token == None:
 			raise ValueError(
 				{
@@ -71,22 +72,22 @@ class RequestArgParser(object):
 					"message": f"The authorization token is missing.",
 				}
 			)
-		elif not auth_token.count(sep_char) == 1:
+		elif not auth_token.count(self.sep_char) == 1:
 			raise ValueError(
 				{
 					"code": "invalid-auth-token",
-					"message": f"In the format _{sep_char}_, the input auth token {auth_token} is invalid.",
+					"message": f"In the format _{self.sep_char}_, the input auth token {auth_token} is invalid.",
 				}
 			)
-		username, password = auth_token.split(sep_char)
+		username, password = auth_token.split(self.sep_char)
 		username = "".join(chr(int(byte)) for byte in username.split(":"))
 		password = "".join(chr(int(byte)) for byte in password.split(":"))
 		return username, password
 
 
 class Moodle(object):
-	username = '<username>'
-	password = '<password>'
+	username = "<username>"
+	password = "<password>"
 	login_url = "https://learn.iiitb.net/login/index.php"
 	day_url = "https://learn.iiitb.net/calendar/view.php?view=day&time="
 	month_url = "https://learn.iiitb.net/calendar/view.php?view=month&time="
@@ -134,10 +135,10 @@ class Moodle(object):
 	def scrape_calendar(self):
 		events = {"id": 0, "data": {}}
 		params = {
-		'from_date': self.from_date,
-		'to_date': self.to_date,
-		'in_depth': self.in_depth,
-		'mock': self.mock,
+		"from_date": self.from_date,
+		"to_date": self.to_date,
+		"in_depth": self.in_depth,
+		"mock": self.mock,
 		}
 		dt_util = DateTimeUtil(params)
 		if self.mock:
@@ -246,34 +247,58 @@ class Moodle(object):
 		return events
 
 
+class StudentDB(object):
+	def __init__(self, params):
+		super(StudentDB, self).__init__()
+		self.roll_no = params.get("roll_no")
+		database_path = params.get("database_path", "student.json")
+		try:
+			with open(database_path, "r") as file:
+				self.database = json.load(file)
+		except FileNotFoundError as e:
+			self.database = {}
+
+	def exist(self):
+		return self.roll_no in self.database
+
+	def getData(self, key):
+		data = self.database.get(self.roll_no)
+		if data != None:
+			return data[key]
+		else:
+			raise ValueError(
+					{
+						"code": "roll-no-does-not-exist",
+						"message": f"The roll number specified does not exist in the database.",
+					}
+				)
+
+
 app = flask.Flask(__name__)
 
 @app.route("/", methods=["GET"])
 def welcome():
-    hour = DateTimeUtil.date_time.hour
-    if hour < 12:
-        greeting = "Good Morning!"
-    elif hour < 17:
-        greeting = "Good Afternoon!"
-    else:
-        greeting = "Good Evening!"
-    return flask.jsonify(greeting), 200
+	hour = DateTimeUtil.date_time.hour
+	if hour < 12:
+		greeting = "Good Morning!"
+	elif hour < 17:
+		greeting = "Good Afternoon!"
+	else:
+		greeting = "Good Evening!"
+	return flask.jsonify(greeting), 200
 
 @app.route("/moodle/verify/", methods=["GET"])
 def moodle_verify_credential():
-	try:
-		auth_token = flask.request.args.get("auth_token", type=str, default=None)
-		req_arg_parser = RequestArgParser()
-		username, password = req_arg_parser.decode_moodle_auth(auth_token)
-		params = {
-			"username": username,
-			"password": password,
-		}
-		moodle = Moodle(params)
-		is_verified = moodle.verify_credential()
-		return flask.jsonify(is_verified), 200
-	except ValueError as error:
-		return flask.jsonify(error.args[0]), 400
+	auth_token = flask.request.args.get("auth_token", type=str, default=None)
+	req_arg_parser = RequestArgParser()
+	username, password = req_arg_parser.decode_moodle_auth(auth_token)
+	params = {
+		"username": username,
+		"password": password,
+	}
+	moodle = Moodle(params)
+	is_verified = moodle.verify_credential()
+	return flask.jsonify(is_verified), 200
 
 
 @app.route("/moodle/events/", methods=["GET"])
@@ -289,11 +314,11 @@ def moodle_scrape_calendar():
 			username = Moodle.username
 			password = Moodle.password
 			if in_depth:
-				from_date = req_arg_parser.format_date('2021-05-20')
-				to_date = req_arg_parser.format_date('2021-05-21')
+				from_date = req_arg_parser.format_date("2021-05-20")
+				to_date = req_arg_parser.format_date("2021-05-21")
 			else:
-				from_date = req_arg_parser.format_date('2021-05-01')
-				to_date = req_arg_parser.format_date('2021-06-30')
+				from_date = req_arg_parser.format_date("2021-05-01")
+				to_date = req_arg_parser.format_date("2021-06-30")
 		else:
 			username, password = req_arg_parser.decode_moodle_auth(auth_token)
 			from_date = req_arg_parser.format_date(from_date)
@@ -312,6 +337,41 @@ def moodle_scrape_calendar():
 	except ValueError as error:
 		return flask.jsonify(error.args[0]), 400
 
+@app.route("/student/exist/", methods=["GET"])
+def student_data_exist():
+	roll_no = flask.request.args.get("roll_no", type=str, default=None)
+	params = {
+		"roll_no": roll_no,
+	}
+	studentdb = StudentDB(params)
+	does_exist = studentdb.exist()
+	return flask.jsonify(does_exist), 200
+
+@app.route("/student/email/", methods=["GET"])
+def student_retrieve_email():
+	try:
+		roll_no = flask.request.args.get("roll_no", type=str, default=None)
+		params = {
+			"roll_no": roll_no,
+		}
+		studentdb = StudentDB(params)
+		student_data = studentdb.getData('email')
+		return flask.jsonify(student_data), 200
+	except ValueError as error:
+		return flask.jsonify(error.args[0]), 400
+
+@app.route("/student/d-id/", methods=["GET"])
+def student_retrieve_dId():
+	try:
+		roll_no = flask.request.args.get("roll_no", type=str, default=None)
+		params = {
+			"roll_no": roll_no,
+		}
+		studentdb = StudentDB(params)
+		student_data = studentdb.getData('d-id')
+		return flask.jsonify(student_data), 200
+	except ValueError as error:
+		return flask.jsonify(error.args[0]), 400
 
 def main():
 	username = "<username>"
@@ -332,6 +392,8 @@ def main():
 		"to_date": to_date,
 		"in_depth": in_depth,
 		"mock": mock,
+		"roll_no": "IMT2018038",
+		"database_path": "student.json"
 	}
 	# moodle = Moodle(params)
 	## moodle-verify
@@ -339,6 +401,10 @@ def main():
 	## moodle-scrape-calendar
 	# json = moodle.scrape_calendar()
 	# print(json)
+	studentdb = StudentDB(params)
+	# json = studentdb.exist()
+	json = studentdb.getData()
+	print(json)
 
 
 if __name__ == "__main__":
