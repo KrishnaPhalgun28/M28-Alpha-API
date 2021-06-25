@@ -403,7 +403,7 @@ def main():
 	# print(json)
 	studentdb = StudentDB(params)
 	# json = studentdb.exist()
-	json = studentdb.getData()
+	json = studentdb.getData('email')
 	print(json)
 
 
