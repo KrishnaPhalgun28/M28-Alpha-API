@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 from random import randint
 import json
+import os
 
 class DateTimeUtil(object):
 	date_time = datetime.datetime.today()
@@ -250,8 +251,9 @@ class Moodle(object):
 class StudentDB(object):
 	def __init__(self, params):
 		super(StudentDB, self).__init__()
+		current_dir_path = os.path.dirname(os.path.abspath(__file__))
 		self.roll_no = params.get("roll_no")
-		database_path = params.get("database_path", "student.json")
+		database_path = params.get("database_path", current_dir_path+"/student.json")
 		try:
 			with open(database_path, "r") as file:
 				self.database = json.load(file)
