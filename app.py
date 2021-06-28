@@ -12,6 +12,8 @@ from bs4 import BeautifulSoup
 from random import randint
 import json
 import os
+import re
+
 
 class DateTimeUtil(object):
 	date_time = datetime.datetime.today()
@@ -51,6 +53,7 @@ class RequestArgParser(object):
 	def __init__(self, sep_char="x"):
 		super(RequestArgParser, self).__init__()
 		self.sep_char = sep_char
+		self.email_regex = "^(.+)@(.+)$"
 
 	def format_date(self, date_string):
 		if date_string == None:
@@ -84,6 +87,17 @@ class RequestArgParser(object):
 		username = "".join(chr(int(byte)) for byte in username.split(":"))
 		password = "".join(chr(int(byte)) for byte in password.split(":"))
 		return username, password
+
+	def validate_email(self, email):
+		if(re.search(self.email_regex, email)):
+			return email
+		else:
+			raise ValueError(
+				{
+					"code": "invalid-email-format",
+					"message": f"In the format {self.email_regex}, the input {email} is invalid.",
+				}
+			)
 
 
 class Moodle(object):
@@ -252,7 +266,7 @@ class StudentDB(object):
 	def __init__(self, params):
 		super(StudentDB, self).__init__()
 		current_dir_path = os.path.dirname(os.path.abspath(__file__))
-		self.roll_no = params.get("roll_no")
+		self.email = params.get("email")
 		database_path = params.get("database_path", current_dir_path+"/student.json")
 		try:
 			with open(database_path, "r") as file:
@@ -261,17 +275,17 @@ class StudentDB(object):
 			self.database = {}
 
 	def exist(self):
-		return self.roll_no in self.database
+		return self.email in self.database
 
-	def getData(self, key):
-		data = self.database.get(self.roll_no)
+	def getData(self):
+		data = self.database.get(self.email)
 		if data != None:
-			return data[key]
+			return data
 		else:
 			raise ValueError(
 					{
-						"code": "roll-no-does-not-exist",
-						"message": f"The roll number specified does not exist in the database.",
+						"code": "email-does-not-exist",
+						"message": f"The email specified does not exist in the database.",
 					}
 				)
 
@@ -341,36 +355,30 @@ def moodle_scrape_calendar():
 
 @app.route("/student/exist/", methods=["GET"])
 def student_data_exist():
-	roll_no = flask.request.args.get("roll_no", type=str, default=None)
-	params = {
-		"roll_no": roll_no,
-	}
-	studentdb = StudentDB(params)
-	does_exist = studentdb.exist()
-	return flask.jsonify(does_exist), 200
-
-@app.route("/student/email/", methods=["GET"])
-def student_retrieve_email():
 	try:
-		roll_no = flask.request.args.get("roll_no", type=str, default=None)
+		req_arg_parser = RequestArgParser()
+		email = flask.request.args.get("email", type=str, default=None)
+		email = req_arg_parser.validate_email(email)
 		params = {
-			"roll_no": roll_no,
+			"email": email,
 		}
 		studentdb = StudentDB(params)
-		student_data = studentdb.getData('email')
-		return flask.jsonify(student_data), 200
+		does_exist = studentdb.exist()
+		return flask.jsonify(does_exist), 200
 	except ValueError as error:
 		return flask.jsonify(error.args[0]), 400
 
-@app.route("/student/d-id/", methods=["GET"])
-def student_retrieve_dId():
+@app.route("/student/data/", methods=["GET"])
+def student_data_retrieve():
 	try:
-		roll_no = flask.request.args.get("roll_no", type=str, default=None)
+		req_arg_parser = RequestArgParser()
+		email = flask.request.args.get("email", type=str, default=None)
+		email = req_arg_parser.validate_email(email)
 		params = {
-			"roll_no": roll_no,
+			"email": email,
 		}
 		studentdb = StudentDB(params)
-		student_data = studentdb.getData('d-id')
+		student_data = studentdb.getData()
 		return flask.jsonify(student_data), 200
 	except ValueError as error:
 		return flask.jsonify(error.args[0]), 400
@@ -394,7 +402,7 @@ def main():
 		"to_date": to_date,
 		"in_depth": in_depth,
 		"mock": mock,
-		"roll_no": "IMT2018038",
+		"email": "kpiiitb@gmail.com",
 		"database_path": "student.json"
 	}
 	# moodle = Moodle(params)
@@ -405,7 +413,7 @@ def main():
 	# print(json)
 	studentdb = StudentDB(params)
 	# json = studentdb.exist()
-	json = studentdb.getData('email')
+	json = studentdb.getData()
 	print(json)
 
 
