@@ -48,10 +48,10 @@ def main():
 		"database_path": "student.json"
 	}
 	studentdb = StudentDB(params)
-	# key = '<roll_no>'
+	# key = 'email'
 	# value = {
-	# 	'email': '<email>',
-	# 	'd-id': '<card-no>',
+	# 	'roll_no': '<roll-no>',
+	# 	'card_no': '<card-no>',
 	# }
 	# studentdb.create_entry(key, value)
 	# studentdb.delete_entry(key, value)
