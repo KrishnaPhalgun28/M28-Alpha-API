@@ -14,6 +14,7 @@ import json
 import os
 import re
 
+current_dir_path = os.path.dirname(os.path.abspath(__file__))
 
 class DateTimeUtil(object):
 	date_time = datetime.datetime.today()
@@ -265,7 +266,6 @@ class Moodle(object):
 class StudentDB(object):
 	def __init__(self, params):
 		super(StudentDB, self).__init__()
-		current_dir_path = os.path.dirname(os.path.abspath(__file__))
 		self.email = params.get("email")
 		database_path = params.get("database_path", current_dir_path+"/student.json")
 		try:
@@ -288,6 +288,41 @@ class StudentDB(object):
 						"message": f"The email specified does not exist in the database.",
 					}
 				)
+
+
+class FoodmenuDB(object):
+	def __init__(self, params):
+		super(FoodmenuDB, self).__init__()
+		self.from_date = params.get("from_date")
+		self.to_date = params.get("to_date")
+		self.in_depth = True
+		self.mock = params.get("mock")
+		self.empty_menu = {
+			"breakfast": [],
+			"lunch": [],
+			"snacks": [],
+			"dinner": []
+		}
+		database_path = params.get("database_path", current_dir_path+"/foodmenu.json")
+		try:
+			with open(database_path, "r") as file:
+				self.database = json.load(file)
+		except FileNotFoundError as e:
+			self.database = {}
+
+	def getData(self):
+		params = {
+			"from_date": self.from_date,
+			"to_date": self.to_date,
+			"in_depth": self.in_depth,
+			"mock": self.mock,
+		}
+		dt_util = DateTimeUtil(params)
+		foodmenu_data = {}
+		for epoch in dt_util.from_to_epochs:
+			date_string = str(datetime.datetime.fromtimestamp(epoch).date())
+			foodmenu_data[date_string] = self.database.get(date_string, self.empty_menu)
+		return foodmenu_data
 
 
 app = flask.Flask(__name__)
@@ -383,6 +418,30 @@ def student_data_retrieve():
 	except ValueError as error:
 		return flask.jsonify(error.args[0]), 400
 
+@app.route("/foodmenu/data/", methods=["GET"])
+def foodmenu_data_retrieve():
+	from_date = flask.request.args.get("from", type=str, default=None)
+	to_date = flask.request.args.get("to", type=str, default=None)
+	mock = flask.request.args.get("mock", type=bool, default=False)
+	try:
+		req_arg_parser = RequestArgParser()
+		if mock:
+			from_date = req_arg_parser.format_date("2021-07-04")
+			to_date = req_arg_parser.format_date("2021-07-08")
+		else:
+			from_date = req_arg_parser.format_date(from_date)
+			to_date = req_arg_parser.format_date(to_date)
+		params = {
+			"from_date": from_date,
+			"to_date": to_date,
+			"mock": mock,
+		}
+		foodmenudb = FoodmenuDB(params)
+		foodmenu_data = foodmenudb.getData()
+		return flask.jsonify(foodmenu_data), 200
+	except ValueError as error:
+		return flask.jsonify(error.args[0]), 400
+
 def main():
 	username = "<username>"
 	password = "<password>"
@@ -411,9 +470,11 @@ def main():
 	## moodle-scrape-calendar
 	# json = moodle.scrape_calendar()
 	# print(json)
-	studentdb = StudentDB(params)
+	# studentdb = StudentDB(params)
 	# json = studentdb.exist()
-	json = studentdb.getData()
+	# json = studentdb.getData()
+	foodmenudb = FoodmenuDB(params)
+	json = foodmenudb.getData()
 	print(json)
 
 
