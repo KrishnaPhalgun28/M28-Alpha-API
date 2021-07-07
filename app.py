@@ -324,6 +324,26 @@ class FoodmenuDB(object):
 			foodmenu_data[date_string] = self.database.get(date_string, self.empty_menu)
 		return foodmenu_data
 
+class EightBitDB(object):
+	def __init__(self, params):
+		super(EightBitDB, self).__init__()
+		self.recent = params.get("recent")
+		self.all = params.get("all")
+		database_path = params.get("database_path", current_dir_path+"/eightbit.json")
+		try:
+			with open(database_path, "r") as file:
+				self.database = json.load(file)
+		except FileNotFoundError as e:
+			self.database = []
+
+	def getData(self):
+		if(self.recent):
+			magazine_data = self.database[-5:]
+			return magazine_data
+		if(self.all):
+			magazine_data = self.database
+			return magazine_data			
+		return self.database
 
 app = flask.Flask(__name__)
 
@@ -439,6 +459,22 @@ def foodmenu_data_retrieve():
 		foodmenudb = FoodmenuDB(params)
 		foodmenu_data = foodmenudb.getData()
 		return flask.jsonify(foodmenu_data), 200
+	except ValueError as error:
+		return flask.jsonify(error.args[0]), 400
+
+@app.route("/eightbit/data/", methods=["GET"])
+def eight_data_retrieve():
+	try:
+		req_arg_parser = RequestArgParser()
+		recent = flask.request.args.get("recent", type=bool, default=False)
+		full = flask.request.args.get("full", type=bool, default=False)
+		params = {
+			"recent": recent,
+			"full": full,
+		}
+		eightbitdb = EightBitDB(params)
+		eightbit_data = eightbitdb.getData()
+		return flask.jsonify(eightbit_data), 200
 	except ValueError as error:
 		return flask.jsonify(error.args[0]), 400
 
